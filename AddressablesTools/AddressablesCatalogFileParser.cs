@@ -5,10 +5,12 @@ using AssetsTools.NET;
 using AssetsTools.NET.Extra;
 using System;
 using System.Buffers.Binary;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
-using System.Text.Encodings.Web;
 using System.Text.Json;
+using AddressablesTools.Classes;
 
 namespace AddressablesTools
 {
@@ -152,15 +154,22 @@ namespace AddressablesTools
 
         public static string ToJson(ContentCatalogData ccd)
         {
-            ContentCatalogDataJson ccdJson = new ContentCatalogDataJson();
-
+            var ccdJson = new ContentCatalogDataJson();
             ccd.Write(ccdJson);
 
-            JsonSerializerOptions options = new JsonSerializerOptions()
+            return JsonSerializer.Serialize(ccdJson, CatalogJsonSerializerContext.CatalogJsonOptions);
+        }
+
+        public static string ToBundleInfoJson(ContentCatalogData ccd)
+        {
+            var dict = new Dictionary<string, BundleInfo>();
+            foreach (var resource in ccd.Resources.Values.SelectMany(x => x))
             {
-                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-            };
-            return JsonSerializer.Serialize(ccdJson, options);
+                if (resource.Data is WrappedSerializedObject { Object: AssetBundleRequestOptions abro })
+                    dict.Add(resource.PrimaryKey, new BundleInfo(resource.InternalId, resource.ProviderId, abro));
+            }
+
+            return JsonSerializer.Serialize(dict, CatalogJsonSerializerContext.CatalogJsonOptions);
         }
 
         internal static void ToBundle(ContentCatalogData ccd, AssetsManager manager, BundleFileInstance bundleInst, Stream stream)

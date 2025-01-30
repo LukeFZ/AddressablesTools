@@ -29,19 +29,19 @@ namespace AddressablesTools.Catalog
 
         internal static object DecodeV1(BinaryReader br)
         {
-            ObjectType type = (ObjectType)br.ReadByte();
+            var type = (ObjectType)br.ReadByte();
 
             switch (type)
             {
                 case ObjectType.AsciiString:
                 {
-                    string str = ReadString4(br);
+                    var str = ReadString4(br);
                     return str;
                 }
 
                 case ObjectType.UnicodeString:
                 {
-                    string str = ReadString4Unicode(br);
+                    var str = ReadString4Unicode(br);
                     return str;
                 }
 
@@ -62,31 +62,31 @@ namespace AddressablesTools.Catalog
 
                 case ObjectType.Hash128:
                 {
-                    string str = ReadString1(br);
-                    Hash128 hash = new Hash128(str);
+                    var str = ReadString1(br);
+                    var hash = new Hash128(str);
                     return hash;
                 }
 
                 case ObjectType.Type:
                 {
-                    string str = ReadString1(br);
-                    TypeReference typeReference = new TypeReference(str);
+                    var str = ReadString1(br);
+                    var typeReference = new TypeReference(str);
                     return typeReference;
                 }
 
                 case ObjectType.JsonObject:
                 {
-                    string assemblyName = ReadString1(br);
-                    string className = ReadString1(br);
-                    string jsonText = ReadString4Unicode(br);
+                    var assemblyName = ReadString1(br);
+                    var className = ReadString1(br);
+                    var jsonText = ReadString4Unicode(br);
 
-                    ClassJsonObject jsonObj = new ClassJsonObject(assemblyName, className, jsonText);
-                    string matchName = jsonObj.Type.GetMatchName();
+                    var jsonObj = new ClassJsonObject(assemblyName, className, jsonText);
+                    var matchName = jsonObj.Type.MatchName;
                     switch (matchName)
                     {
                         case ABRO_TYPENAME:
                         {
-                            AssetBundleRequestOptions obj = new AssetBundleRequestOptions();
+                            var obj = new AssetBundleRequestOptions();
                             obj.Read(jsonText);
                             return new WrappedSerializedObject(jsonObj.Type, obj);
                         }
@@ -106,86 +106,75 @@ namespace AddressablesTools.Catalog
         internal static object DecodeV2(CatalogBinaryReader reader, uint offset)
         {
             if (offset == uint.MaxValue)
-            {
                 return null;
-            }
 
             reader.BaseStream.Position = offset;
-            uint typeNameOffset = reader.ReadUInt32();
-            uint objectOffset = reader.ReadUInt32();
+            var typeNameOffset = reader.ReadUInt32();
+            var objectOffset = reader.ReadUInt32();
 
-            SerializedType serializedType = new SerializedType();
-            serializedType.Read(reader, typeNameOffset);
-            string matchName = serializedType.GetMatchName();
+            var isDefaultObject = objectOffset == uint.MaxValue;
+
+            var type = reader.ReadSerializedType(typeNameOffset);
+            var matchName = type.MatchName;
+
             switch (matchName)
             {
                 case INT_TYPENAME:
                 {
-                    if (objectOffset == uint.MaxValue)
-                    {
+                    if (isDefaultObject)
                         return default(int);
-                    }
 
                     reader.BaseStream.Position = objectOffset;
                     return reader.ReadInt32();
                 }
                 case LONG_TYPENAME:
                 {
-                    if (objectOffset == uint.MaxValue)
-                    {
+                    if (isDefaultObject)
                         return default(long);
-                    }
 
                     reader.BaseStream.Position = objectOffset;
                     return reader.ReadInt64();
                 }
                 case BOOL_TYPENAME:
                 {
-                    if (objectOffset == uint.MaxValue)
-                    {
+                    if (isDefaultObject)
                         return default(bool);
-                    }
+
 
                     reader.BaseStream.Position = objectOffset;
                     return reader.ReadBoolean();
                 }
                 case STRING_TYPENAME:
                 {
-                    if (objectOffset == uint.MaxValue)
-                    {
+                    if (isDefaultObject)
                         return default(string);
-                    }
 
                     reader.BaseStream.Position = objectOffset;
-                    uint stringOffset = reader.ReadUInt32();
-                    char separator = reader.ReadChar();
+                    var stringOffset = reader.ReadUInt32();
+                    var separator = reader.ReadChar();
                     return reader.ReadEncodedString(stringOffset, separator);
                 }
                 case HASH128_TYPENAME:
                 {
-                    if (objectOffset == uint.MaxValue)
-                    {
+                    if (isDefaultObject)
                         return default(Hash128);
-                    }
 
                     reader.BaseStream.Position = objectOffset;
-                    uint v0 = reader.ReadUInt32();
-                    uint v1 = reader.ReadUInt32();
-                    uint v2 = reader.ReadUInt32();
-                    uint v3 = reader.ReadUInt32();
+                    var v0 = reader.ReadUInt32();
+                    var v1 = reader.ReadUInt32();
+                    var v2 = reader.ReadUInt32();
+                    var v3 = reader.ReadUInt32();
                     return new Hash128(v0, v1, v2, v3);
                 }
                 case ABRO_TYPENAME:
                 {
                     if (objectOffset == uint.MaxValue)
-                    {
                         return default(AssetBundleRequestOptions);
-                    }
 
-                    AssetBundleRequestOptions obj = new AssetBundleRequestOptions();
+                    var obj = new AssetBundleRequestOptions();
                     obj.Read(reader, objectOffset);
 
-                    WrappedSerializedObject wso = new WrappedSerializedObject(serializedType, obj);
+                    var wso = new WrappedSerializedObject(type, obj);
                     return wso;
                 }
                 default:
@@ -201,8 +190,8 @@ namespace AddressablesTools.Catalog
             {
                 case string str:
                 {
-                    byte[] asciiEncoding = Encoding.ASCII.GetBytes(str);
-                    string asciiText = Encoding.ASCII.GetString(asciiEncoding);
+                    var asciiEncoding = Encoding.ASCII.GetBytes(str);
+                    var asciiText = Encoding.ASCII.GetString(asciiEncoding);
                     if (str != asciiText)
                     {
                         bw.Write((byte)ObjectType.UnicodeString);
@@ -264,13 +253,14 @@ namespace AddressablesTools.Catalog
 
                 case WrappedSerializedObject wso:
                 {
-                    string matchName = wso.Type.GetMatchName();
+                    var matchName = wso.Type.MatchName;
                     string jsonText;
+
                     switch (matchName)
                     {
                         case ABRO_TYPENAME:
                         {
-                            AssetBundleRequestOptions abro = (AssetBundleRequestOptions)wso.Object;
+                            var abro = (AssetBundleRequestOptions)wso.Object;
                             jsonText = abro.WriteJson();
                             break;
                         }
@@ -279,10 +269,11 @@ namespace AddressablesTools.Catalog
                             throw new Exception($"Serialized type {wso.Type.AssemblyName}; {wso.Type.ClassName} not supported");
                         }
                     }
+
                     bw.Write((byte)ObjectType.JsonObject);
                     WriteString1(bw, wso.Type.AssemblyName);
                     WriteString1(bw, wso.Type.ClassName);
-                    WriteString1(bw, jsonText);
+                    WriteString4Unicode(bw, jsonText);
                     break;
                 }
 
@@ -296,21 +287,21 @@ namespace AddressablesTools.Catalog
         private static string ReadString1(BinaryReader br)
         {
             int length = br.ReadByte();
-            string str = Encoding.ASCII.GetString(br.ReadBytes(length));
+            var str = Encoding.ASCII.GetString(br.ReadBytes(length));
             return str;
         }
 
         private static string ReadString4(BinaryReader br)
         {
-            int length = br.ReadInt32();
-            string str = Encoding.ASCII.GetString(br.ReadBytes(length));
+            var length = br.ReadInt32();
+            var str = Encoding.ASCII.GetString(br.ReadBytes(length));
             return str;
         }
 
         private static string ReadString4Unicode(BinaryReader br)
         {
-            int length = br.ReadInt32();
-            string str = Encoding.Unicode.GetString(br.ReadBytes(length));
+            var length = br.ReadInt32();
+            var str = Encoding.Unicode.GetString(br.ReadBytes(length));
             return str;
         }
 
@@ -319,21 +310,21 @@ namespace AddressablesTools.Catalog
             if (str.Length > 255)
                 throw new ArgumentException("String length cannot be greater than 255");
 
-            byte[] bytes = Encoding.ASCII.GetBytes(str);
+            var bytes = Encoding.ASCII.GetBytes(str);
             bw.Write((byte)bytes.Length);
             bw.Write(bytes);
         }
 
         private static void WriteString4(BinaryWriter bw, string str)
         {
-            byte[] bytes = Encoding.ASCII.GetBytes(str);
+            var bytes = Encoding.ASCII.GetBytes(str);
             bw.Write(bytes.Length);
             bw.Write(bytes);
         }
 
         private static void WriteString4Unicode(BinaryWriter bw, string str)
         {
-            byte[] bytes = Encoding.Unicode.GetBytes(str);
+            var bytes = Encoding.Unicode.GetBytes(str);
             bw.Write(bytes.Length);
             bw.Write(bytes);
         }

@@ -227,22 +227,19 @@ namespace AddressablesTools.Catalog
 
         private void ReadResources(CatalogBinaryReader reader, ContentCatalogDataBinaryHeader header)
         {
-            uint[] keyLocationOffsets = reader.ReadOffsetArray(header.KeysOffset);
+            var keyLocationOffsets = reader.ReadOffsetArray(header.KeysOffset);
             Resources = new Dictionary<object, List<ResourceLocation>>(keyLocationOffsets.Length / 2);
-            for (int i = 0; i < keyLocationOffsets.Length; i += 2)
-            {
-                uint keyOffset = keyLocationOffsets[i];
-                uint locationListOffset = keyLocationOffsets[i + 1];
-                object key = SerializedObjectDecoder.DecodeV2(reader, keyOffset);
 
-                uint[] locationOffsets = reader.ReadOffsetArray(locationListOffset);
-                List<ResourceLocation> locations = new List<ResourceLocation>(locationOffsets.Length);
-                for (int j = 0; j < locationOffsets.Length; j++)
-                {
-                    ResourceLocation location = new ResourceLocation();
-                    location.Read(reader, locationOffsets[j]);
-                    locations.Add(location);
-                }
+            for (var i = 0; i < keyLocationOffsets.Length; i += 2)
+            {
+                var keyOffset = keyLocationOffsets[i];
+                var locationListOffset = keyLocationOffsets[i + 1];
+
+                var key = reader.ReadSerializedObject(keyOffset);
+
+                var locationOffsets = reader.ReadOffsetArray(locationListOffset);
+                var locations = new List<ResourceLocation>(locationOffsets.Length);
+                locations.AddRange(locationOffsets.Select(reader.ReadResourceLocation));
 
                 Resources[key] = locations;
             }

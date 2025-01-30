@@ -1,5 +1,5 @@
-﻿using AddressablesTools.Reader;
-using System.Text.Encodings.Web;
+﻿using AddressablesTools.JSON;
+using AddressablesTools.Reader;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -85,11 +85,6 @@ namespace AddressablesTools.Classes
 
         internal string WriteJson()
         {
-            JsonSerializerOptions options = new JsonSerializerOptions()
-            {
-                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-            };
-
             JsonObject jsonObj = new JsonObject();
 
             // how many of these properties existed during v1?
@@ -106,7 +101,7 @@ namespace AddressablesTools.Classes
             jsonObj["m_UseUWRForLocalBundles"] = UseUnityWebRequestForLocalBundles;
             jsonObj["m_ClearOtherCachedVersionsWhenLoaded"] = ClearOtherCachedVersionsWhenLoaded;
 
-            return JsonSerializer.Serialize(jsonObj, options);
+            return JsonSerializer.Serialize(jsonObj, CatalogJsonSerializerContext.CatalogJsonOptions);
         }
 
         public class CommonInfo

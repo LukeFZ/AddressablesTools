@@ -1,5 +1,4 @@
 ﻿using AddressablesTools.JSON;
-using AddressablesTools.Reader;
 using System;
 using System.IO;
 
@@ -9,6 +8,36 @@ namespace AddressablesTools.Catalog
     {
         public string AssemblyName { get; set; }
         public string ClassName { get; set; }
+
+        public string MatchName
+        {
+            get
+            {
+                _cachedMatchName ??= $"{ShortName}; {ClassName}";
+                return _cachedMatchName;
+            }
+        }
+
+        public string ShortName
+        {
+            get
+            {
+                if (_cachedShortName == null)
+                {
+                    if (!AssemblyName.Contains(','))
+                    {
+                        throw new InvalidDataException("Assembly name must have commas");
+                    }
+
+                    _cachedShortName = AssemblyName.Split(',')[0];
+                }
+
+                return _cachedShortName;
+            }
+        }
+
+        private string? _cachedMatchName;
+        private string? _cachedShortName;
 
         public override bool Equals(object obj)
         {
@@ -28,36 +57,10 @@ namespace AddressablesTools.Catalog
             ClassName = type.m_ClassName;
         }
 
-        internal void Read(CatalogBinaryReader reader, uint offset)
-        {
-            reader.BaseStream.Position = offset;
-
-            uint assemblyNameOffset = reader.ReadUInt32();
-            uint classNameOffset = reader.ReadUInt32();
-
-            AssemblyName = reader.ReadEncodedString(assemblyNameOffset, '.');
-            ClassName = reader.ReadEncodedString(classNameOffset, '.');
-        }
-
         internal void Write(SerializedTypeJson type)
         {
             type.m_AssemblyName = AssemblyName;
             type.m_ClassName = ClassName;
-        }
-
-        internal string GetMatchName()
-        {
-            return GetAssemblyShortName() + "; " + ClassName;
-        }
-
-        internal string GetAssemblyShortName()
-        {
-            if (!AssemblyName.Contains(','))
-            {
-                throw new InvalidDataException("Assembly name must have commas");
-            }
-
-            return AssemblyName.Split(',')[0];
         }
     }
 }

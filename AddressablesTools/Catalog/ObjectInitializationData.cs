@@ -21,13 +21,12 @@ namespace AddressablesTools.Catalog
         {
             reader.BaseStream.Position = offset;
 
-            uint idOffset = reader.ReadUInt32();
-            uint objectTypeOffset = reader.ReadUInt32();
-            uint dataOffset = reader.ReadUInt32();
+            var idOffset = reader.ReadUInt32();
+            var objectTypeOffset = reader.ReadUInt32();
+            var dataOffset = reader.ReadUInt32();
 
             Id = reader.ReadEncodedString(idOffset);
-            ObjectType = new SerializedType();
-            ObjectType.Read(reader, objectTypeOffset);
+            ObjectType = reader.ReadSerializedType(objectTypeOffset);
             Data = reader.ReadEncodedString(dataOffset);
         }
 
