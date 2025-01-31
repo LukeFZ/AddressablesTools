@@ -105,9 +105,6 @@ namespace AddressablesTools.Catalog
 
         internal static object DecodeV2(CatalogBinaryReader reader, uint offset)
         {
-            if (offset == uint.MaxValue)
-                return null;
-
             reader.BaseStream.Position = offset;
 
             var typeNameOffset = reader.ReadUInt32();

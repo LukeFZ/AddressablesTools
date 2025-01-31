@@ -95,6 +95,9 @@ namespace AddressablesTools.Reader
 
         public T ReadObject<T>(uint offset, bool cache = true) where T : IBinaryReadable<T>
         {
+            if (offset == uint.MaxValue)
+                return default;
+
             if (TryGetCachedValue(offset, out T value))
                 return value;
 
@@ -141,6 +144,9 @@ namespace AddressablesTools.Reader
 
         public uint[] ReadOffsetArray(uint offset)
         {
+            if (offset == uint.MaxValue)
+                return [];
+
             BaseStream.Position = offset - 4;
 
             var sizeInBytes = ReadInt32();
@@ -158,6 +164,9 @@ namespace AddressablesTools.Reader
 
         public object ReadSerializedObject(uint offset, bool cache = true)
         {
+            if (offset == uint.MaxValue)
+                return null;
+
             if (TryGetCachedValue(offset, out object value))
                 return value;
 
