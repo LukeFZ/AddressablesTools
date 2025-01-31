@@ -1,10 +1,12 @@
 ﻿using AddressablesTools.JSON;
 using System;
 using System.IO;
+using AddressablesTools.Binary;
+using AddressablesTools.Reader;
 
 namespace AddressablesTools.Catalog
 {
-    public class SerializedType
+    public class SerializedType : IBinaryReadable<SerializedType>
     {
         public string AssemblyName { get; set; }
         public string ClassName { get; set; }
@@ -61,6 +63,23 @@ namespace AddressablesTools.Catalog
         {
             type.m_AssemblyName = AssemblyName;
             type.m_ClassName = ClassName;
+        }
+
+        static SerializedType IBinaryReadable<SerializedType>.Read(CatalogBinaryReader reader, uint offset)
+        {
+            reader.BaseStream.Position = offset;
+
+            var assemblyNameOffset = reader.ReadUInt32();
+            var classNameOffset = reader.ReadUInt32();
+
+            var assemblyName = reader.ReadEncodedString(assemblyNameOffset, '.');
+            var className = reader.ReadEncodedString(classNameOffset, '.');
+
+            return new SerializedType
+            {
+                AssemblyName = assemblyName,
+                ClassName = className
+            };
         }
     }
 }

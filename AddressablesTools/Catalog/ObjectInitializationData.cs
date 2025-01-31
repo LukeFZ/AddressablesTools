@@ -1,9 +1,10 @@
-﻿using AddressablesTools.JSON;
+﻿using AddressablesTools.Binary;
+using AddressablesTools.JSON;
 using AddressablesTools.Reader;
 
 namespace AddressablesTools.Catalog
 {
-    public class ObjectInitializationData
+    public class ObjectInitializationData : IBinaryReadable<ObjectInitializationData>
     {
         public string Id { get; set; }
         public SerializedType ObjectType { get; set; }
@@ -17,7 +18,15 @@ namespace AddressablesTools.Catalog
             Data = obj.m_Data;
         }
 
-        internal void Read(CatalogBinaryReader reader, uint offset)
+        internal void Write(ObjectInitializationDataJson obj)
+        {
+            obj.m_Id = Id;
+            obj.m_ObjectType = new SerializedTypeJson();
+            ObjectType.Write(obj.m_ObjectType);
+            obj.m_Data = Data;
+        }
+
+        static ObjectInitializationData IBinaryReadable<ObjectInitializationData>.Read(CatalogBinaryReader reader, uint offset)
         {
             reader.BaseStream.Position = offset;
 
@@ -25,17 +34,16 @@ namespace AddressablesTools.Catalog
             var objectTypeOffset = reader.ReadUInt32();
             var dataOffset = reader.ReadUInt32();
 
-            Id = reader.ReadEncodedString(idOffset);
-            ObjectType = reader.ReadSerializedType(objectTypeOffset);
-            Data = reader.ReadEncodedString(dataOffset);
-        }
+            var id = reader.ReadEncodedString(idOffset);
+            var objectType = reader.ReadObject<SerializedType>(objectTypeOffset);
+            var data = reader.ReadEncodedString(dataOffset);
 
-        internal void Write(ObjectInitializationDataJson obj)
-        {
-            obj.m_Id = Id;
-            obj.m_ObjectType = new SerializedTypeJson();
-            ObjectType.Write(obj.m_ObjectType);
-            obj.m_Data = Data;
+            return new ObjectInitializationData
+            {
+                Id = id,
+                ObjectType = objectType,
+                Data = data
+            };
         }
     }
 }

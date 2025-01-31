@@ -99,19 +99,9 @@ namespace AddressablesTools.Catalog
             LocatorId = reader.ReadEncodedString(header.IdOffset);
             BuildResultHash = reader.ReadEncodedString(header.BuildResultHashOffset);
 
-            InstanceProviderData = new ObjectInitializationData();
-            InstanceProviderData.Read(reader, header.InstanceProviderOffset);
-
-            SceneProviderData = new ObjectInitializationData();
-            SceneProviderData.Read(reader, header.SceneProviderOffset);
-
-            uint[] resourceProviderDataOffsets = reader.ReadOffsetArray(header.InitObjectsArrayOffset);
-            ResourceProviderData = new ObjectInitializationData[resourceProviderDataOffsets.Length];
-            for (int i = 0; i < ResourceProviderData.Length; i++)
-            {
-                ResourceProviderData[i] = new ObjectInitializationData();
-                ResourceProviderData[i].Read(reader, resourceProviderDataOffsets[i]);
-            }
+            InstanceProviderData = reader.ReadObject<ObjectInitializationData>(header.InstanceProviderOffset);
+            SceneProviderData = reader.ReadObject<ObjectInitializationData>(header.SceneProviderOffset);
+            ResourceProviderData = reader.ReadObjectArray<ObjectInitializationData>(header.InitObjectsArrayOffset);
 
             ReadResources(reader, header);
         }
@@ -227,19 +217,16 @@ namespace AddressablesTools.Catalog
 
         private void ReadResources(CatalogBinaryReader reader, ContentCatalogDataBinaryHeader header)
         {
-            var keyLocationOffsets = reader.ReadOffsetArray(header.KeysOffset);
-            Resources = new Dictionary<object, List<ResourceLocation>>(keyLocationOffsets.Length / 2);
+            var entries = reader.ReadOffsetArray(header.KeysOffset);
+            Resources = new Dictionary<object, List<ResourceLocation>>(entries.Length);
 
-            for (var i = 0; i < keyLocationOffsets.Length; i += 2)
+            for (var i = 0; i < entries.Length; i += 2)
             {
-                var keyOffset = keyLocationOffsets[i];
-                var locationListOffset = keyLocationOffsets[i + 1];
+                var keyOffset = entries[i];
+                var locationListOffset = entries[i + 1];
 
                 var key = reader.ReadSerializedObject(keyOffset);
-
-                var locationOffsets = reader.ReadOffsetArray(locationListOffset);
-                var locations = new List<ResourceLocation>(locationOffsets.Length);
-                locations.AddRange(locationOffsets.Select(reader.ReadResourceLocation));
+                var locations = reader.ReadObjectArray<ResourceLocation>(locationListOffset).ToList();
 
                 Resources[key] = locations;
             }

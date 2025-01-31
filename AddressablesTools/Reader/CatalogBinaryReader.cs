@@ -1,24 +1,40 @@
-﻿using System.Collections.Generic;
+﻿using System.Buffers;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using AddressablesTools.Binary;
 using AddressablesTools.Catalog;
 
 namespace AddressablesTools.Reader
 {
-    internal class CatalogBinaryReader : BinaryReader
+    internal class CatalogBinaryReader(Stream input) : BinaryReader(input)
     {
         public int Version { get; set; } = 1;
 
-        public CatalogBinaryReader(Stream input) : base(input) { }
+        private readonly Dictionary<uint, object> _cache = [];
 
-        private readonly Dictionary<uint, string> _stringCache = [];
-        private readonly Dictionary<uint, SerializedType> _typeCache = [];
-        private readonly Dictionary<uint, uint[]> _arrayCache = [];
-        private readonly Dictionary<uint, ResourceLocation> _locationCache = [];
-        private readonly Dictionary<uint, object> _objectCache = [];
+        private bool TryGetCachedValue<T>(uint offset, out T value)
+        {
+            value = default;
 
-        private string ReadBasicString(long offset, bool unicode)
+            if (_cache.TryGetValue(offset, out var entry) && entry is T entryValue)
+            {
+                value = entryValue;
+                return true;
+            }
+
+            return false;
+        }
+
+        private void CacheValue<T>(uint offset, T value)
+        {
+            Debug.Assert(!_cache.ContainsKey(offset));
+            _cache[offset] = value;
+        }
+
+        private string ReadBasicString(uint offset, bool unicode)
         {
             BaseStream.Position = offset - 4;
 
@@ -29,12 +45,10 @@ namespace AddressablesTools.Reader
                 ? Encoding.Unicode.GetString(data)
                 : Encoding.ASCII.GetString(data);
 
-            stringValue = string.Intern(stringValue);
-
             return stringValue;
         }
 
-        private string ReadDynamicString(long offset, bool unicode, char sep)
+        private string ReadDynamicString(uint offset, char sep)
         {
             var stack = new Stack<string>();
 
@@ -51,97 +65,106 @@ namespace AddressablesTools.Reader
                 BaseStream.Position = nextPartOffset;
             }
 
-            if (stack.Count == 1)
-                return stack.Pop();
-
-            // todo: investigate if v2 needs this reversed again
-
-            return string.Join(sep, stack.Reverse());
+            return stack.Count == 1
+                // todo: investigate if v2 needs this reversed again
+                ? stack.Pop() 
+                : string.Join(sep, stack.Reverse());
         }
 
-        public string ReadEncodedString(uint encodedOffset, char dynstrSep = '\0')
+        public string ReadEncodedString(uint encodedOffset, char dynstrSep = '\0', bool cache = true)
         {
             if (encodedOffset == uint.MaxValue)
                 return null;
 
-            if (!_stringCache.TryGetValue(encodedOffset, out var value))
-            {
-                var unicode = (encodedOffset & 0x80000000) != 0;
-                var dynamicString = (encodedOffset & 0x40000000) != 0 && dynstrSep != '\0';
-                var offset = (int)(encodedOffset & 0x3fffffff);
+            if (TryGetCachedValue(encodedOffset, out string cachedString))
+                return cachedString;
 
-                _stringCache[encodedOffset] = value = dynamicString
-                    ? ReadDynamicString(offset, unicode, dynstrSep)
-                    : ReadBasicString(offset, unicode);
-            }
+            var unicode = (encodedOffset & 0x80000000) != 0;
+            var dynamicString = (encodedOffset & 0x40000000) != 0 && dynstrSep != '\0';
+            var offset = encodedOffset & 0x3fffffff;
+
+            var value = dynamicString
+                ? ReadDynamicString(offset, dynstrSep)
+                : ReadBasicString(offset, unicode);
+
+            if (cache)
+                CacheValue(encodedOffset, value);
 
             return value;
         }
 
-        public uint[] ReadOffsetArray(uint encodedOffset)
+        public T ReadObject<T>(uint offset, bool cache = true) where T : IBinaryReadable<T>
         {
-            if (encodedOffset == uint.MaxValue)
+            if (TryGetCachedValue(offset, out T value))
+                return value;
+
+            value = T.Read(this, offset);
+
+            if (cache)
+                CacheValue(offset, value);
+
+            return value;
+        }
+
+        public T[] ReadObjectArray<T>(uint offset, bool cache = true) where T : IBinaryReadable<T>
+        {
+            if (offset == uint.MaxValue)
                 return [];
 
-            if (!_arrayCache.TryGetValue(encodedOffset, out var value))
-            {
-                BaseStream.Position = encodedOffset - 4;
+            if (TryGetCachedValue(offset, out T[] value))
+                return value;
 
-                var byteSize = ReadInt32();
-                if (byteSize % sizeof(uint) != 0)
-                {
-                    throw new InvalidDataException("Array size must be a multiple of 4");
-                }
+            BaseStream.Position = offset - 4;
 
-                var elemCount = byteSize / sizeof(uint);
-                _arrayCache[encodedOffset] = value = new uint[elemCount];
+            var sizeInBytes = ReadInt32();
+            if (sizeInBytes % sizeof(uint) != 0)
+                throw new InvalidDataException("Array size must be a multiple of 4");
 
-                for (int i = 0; i < elemCount; i++)
-                    value[i] = ReadUInt32();
-            }
+            var entryCount = sizeInBytes / sizeof(uint);
 
-            return value;
-        }
+            var offsets = ArrayPool<uint>.Shared.Rent(entryCount);
+            value = new T[entryCount];
 
-        public SerializedType ReadSerializedType(uint offset)
-        {
-            if (!_typeCache.TryGetValue(offset, out var value))
-            {
-                BaseStream.Position = offset;
+            for (int i = 0; i < entryCount; i++)
+                offsets[i] = ReadUInt32();
 
-                var assemblyNameOffset = ReadUInt32();
-                var classNameOffset = ReadUInt32();
+            for (int i = 0; i < entryCount; i++)
+                value[i] = ReadObject<T>(offsets[i], cache);
 
-                var assemblyName = ReadEncodedString(assemblyNameOffset, '.');
-                var className = ReadEncodedString(classNameOffset, '.');
+            ArrayPool<uint>.Shared.Return(offsets);
 
-                _typeCache[offset] = value = new SerializedType
-                {
-                    AssemblyName = assemblyName,
-                    ClassName = className
-                };
-            }
+            if (cache)
+                CacheValue(offset, value);
 
             return value;
         }
 
-        public ResourceLocation ReadResourceLocation(uint offset)
+        public uint[] ReadOffsetArray(uint offset)
         {
-            if (!_locationCache.TryGetValue(offset, out var value))
-            {
-                _locationCache[offset] = value = new ResourceLocation();
-                value.Read(this, offset);
-            }
+            BaseStream.Position = offset - 4;
+
+            var sizeInBytes = ReadInt32();
+            if (sizeInBytes % sizeof(uint) != 0)
+                throw new InvalidDataException("Array size must be a multiple of 4");
+
+            var entryCount = sizeInBytes / sizeof(uint);
+
+            var value = new uint[entryCount];
+            for (int i = 0; i < entryCount; i++)
+                value[i] = ReadUInt32();
 
             return value;
         }
 
-        public object ReadSerializedObject(uint offset)
+        public object ReadSerializedObject(uint offset, bool cache = true)
         {
-            if (!_objectCache.TryGetValue(offset, out var value))
-            {
-                _objectCache[offset] = value = SerializedObjectDecoder.DecodeV2(this, offset);
-            }
+            if (TryGetCachedValue(offset, out object value))
+                return value;
+
+            value = SerializedObjectDecoder.DecodeV2(this, offset);
+
+            if (cache)
+                CacheValue(offset, value);
 
             return value;
         }

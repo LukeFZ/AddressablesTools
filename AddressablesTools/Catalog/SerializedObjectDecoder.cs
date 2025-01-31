@@ -109,12 +109,13 @@ namespace AddressablesTools.Catalog
                 return null;
 
             reader.BaseStream.Position = offset;
+
             var typeNameOffset = reader.ReadUInt32();
             var objectOffset = reader.ReadUInt32();
 
             var isDefaultObject = objectOffset == uint.MaxValue;
 
-            var type = reader.ReadSerializedType(typeNameOffset);
+            var type = reader.ReadObject<SerializedType>(typeNameOffset);
             var matchName = type.MatchName;
 
             switch (matchName)

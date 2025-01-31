@@ -1,10 +1,11 @@
 ﻿using AddressablesTools.Reader;
 using System.Collections.Generic;
 using System.Linq;
+using AddressablesTools.Binary;
 
 namespace AddressablesTools.Catalog
 {
-    public class ResourceLocation
+    public class ResourceLocation : IBinaryReadable<ResourceLocation>
     {
         public string InternalId { get; set; }
         public string ProviderId { get; set; }
@@ -32,9 +33,10 @@ namespace AddressablesTools.Catalog
             Type = resourceType;
         }
 
-        internal void Read(CatalogBinaryReader reader, uint offset)
+        private void ReadInternal(CatalogBinaryReader reader, uint offset)
         {
             reader.BaseStream.Position = offset;
+
             var primaryKeyOffset = reader.ReadUInt32();
             var internalIdOffset = reader.ReadUInt32();
             var providerIdOffset = reader.ReadUInt32();
@@ -47,19 +49,21 @@ namespace AddressablesTools.Catalog
             InternalId = reader.ReadEncodedString(internalIdOffset, '/');
             ProviderId = reader.ReadEncodedString(providerIdOffset, '.');
 
-            var dependencyOffsets = reader.ReadOffsetArray(dependenciesOffset);
-
-            var dependencies = new List<ResourceLocation>(dependencyOffsets.Length);
-            dependencies.AddRange(dependencyOffsets.Select(reader.ReadResourceLocation));
-
             DependencyKey = null;
-            Dependencies = dependencies;
+            Dependencies = reader.ReadObjectArray<ResourceLocation>(dependenciesOffset).ToList();
 
             // officially, dependenciesOffset is used here. lol. we can't do
             // that since writing the file would permenantly lose that value.
             DependencyHashCode = dependencyHashCode;
             Data = reader.ReadSerializedObject(dataOffset);
-            Type = reader.ReadSerializedType(typeOffset);
+            Type = reader.ReadObject<SerializedType>(typeOffset);
+        }
+
+        static ResourceLocation IBinaryReadable<ResourceLocation>.Read(CatalogBinaryReader reader, uint offset)
+        {
+            var location = new ResourceLocation();
+            location.ReadInternal(reader, offset);
+            return location;
         }
     }
 }
