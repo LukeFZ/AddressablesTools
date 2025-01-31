@@ -166,13 +166,12 @@ namespace AddressablesTools.Catalog
                 }
                 case ABRO_TYPENAME:
                 {
-                    if (objectOffset == uint.MaxValue)
+                    if (isDefaultObject)
                         return default(AssetBundleRequestOptions);
 
-                    var obj = new AssetBundleRequestOptions();
-                    obj.Read(reader, objectOffset);
+                    var abro = reader.ReadObject<AssetBundleRequestOptions>(objectOffset);
+                    var wso = new WrappedSerializedObject(type, abro);
 
-                    var wso = new WrappedSerializedObject(type, obj);
                     return wso;
                 }
                 default:
